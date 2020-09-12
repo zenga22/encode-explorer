@@ -1930,7 +1930,7 @@ class Logger
 		{
 			if(Location::isFileWritable(EncodeExplorer::getConfig('log_file')))
 			{
-				$message = "[" . date("Y-m-d h:i:s", mktime()) . "] ".$message." (".$_SERVER["HTTP_USER_AGENT"].")\n";
+				$message = "[" . date("Y-m-d h:i:s", time()) . "] ".$message." (".$_SERVER["HTTP_USER_AGENT"].")\n";
 				error_log($message, 3, EncodeExplorer::getConfig('log_file'));
 			}
 			else
