@@ -6,10 +6,15 @@
  * Author : Marek Rei (marek ät marekrei dot com)
  * Version : 6.4.1
  * Homepage : encode-explorer.siineiolekala.net
+ * 
+ * Author : Dirk Huizenga
+ * Version : 6.5.0
  *
  *
  * NB!:If you change anything, save with UTF-8! Otherwise you may
  *     encounter problems, especially when displaying images.
+ * 
+ * Requires PHP 5 >= 5.5.0 or PHP 7
  *
  ***************************************************************************/
 
@@ -27,6 +32,8 @@ $_START_TIME = microtime(TRUE);
 
 /*
  * GENERAL SETTINGS
+ * To change configuration values use local configuration file defined
+ * and included at the end of the configuration section.
  */
 
 //
@@ -137,7 +144,7 @@ $_CONFIG['hidden_dirs'] = array();
 // Filenames that will be hidden from the list.
 // Default: $_CONFIG['hidden_files'] = array(".ftpquota", "index.php", "index.php~", ".htaccess", ".htpasswd");
 //
-$_CONFIG['hidden_files'] = array(".ftpquota", "index.php", "index.php~", ".htaccess", ".htpasswd");
+$_CONFIG['hidden_files'] = array(".ftpquota", "index.php", "index.php~", ".htaccess", ".htpasswd", ".config.php");
 
 //
 // Whether authentication is required to see the contents of the page.
@@ -152,11 +159,13 @@ $_CONFIG['require_login'] = false;
 //
 // Usernames and passwords for restricting access to the page.
 // The format is: array(username, password, status)
-// Status can be either "user" or "admin". User can read the page, admin can upload and delete.
-// For example: $_CONFIG['users'] = array(array("username1", "password1", "user"), array("username2", "password2", "admin"));
+// Status can be either 'user' or 'admin'. User can read the page, admin can upload and delete.
+// Password can be hashed using any algorithm supported by password_hash (PHP 5 >= 5.5.0, PHP 7).
+// For example: $_CONFIG['users'] = array(array('username1', '$2y$10$/f9hj4ywLkx/enJk6tCEHObelfNuZfam2h..zbTl1oRgJFDySXpo2', 'user'), array('username2', '$2y$10$gR9wzOqn/Ch4ekk/LyQbY.e.8Wqr50WaZt4SaS5AzvPAOyfFoH9ee', 'admin'));
+// Plain text of above passwords: password1, password2.
 // You can also keep require_login=false and specify an admin.
-// That way everyone can see the page but username and password are needed for uploading.
-// For example: $_CONFIG['users'] = array(array("username", "password", "admin"));
+// That way everyone can see the page but username and password (xyzzy) are needed for uploading.
+// For example: $_CONFIG['users'] = array(array('admin8', '$2y$10$qEURq1qbkJltv0fkDFalE.ecVA31UWUDAv5726HLhDFM2KDz9mzcy', 'admin'));
 // Default: $_CONFIG['users'] = array();
 //
 $_CONFIG['users'] = array();
@@ -281,6 +290,12 @@ $_CONFIG['large_files'] = false;
 // Default: $_CONFIG['session_name'] = "";
 //
 $_CONFIG['session_name'] = "";
+
+// Include a separate configuration file to override default configuration defined
+// in this file.  For more security move this file out of the document root, but
+// still in the include_path.
+$_CONFIG['local_config'] = ".config.php";
+include $_CONFIG['local_config'];
 
 /***************************************************************************/
 /*   TÕLKED                                                                */
@@ -1982,7 +1997,7 @@ class GateKeeper
 		if(isset($_GET['logout']))
 		{
 			$_SESSION['ee_user_name'] = null;
-			$_SESSION['ee_user_pass'] = null;
+			$_SESSION['ee_user_loggedin'] = False;
 		}
 
 		if(isset($_POST['user_pass']) && strlen($_POST['user_pass']) > 0)
@@ -1990,7 +2005,7 @@ class GateKeeper
 			if(GateKeeper::isUser((isset($_POST['user_name'])?$_POST['user_name']:""), $_POST['user_pass']))
 			{
 				$_SESSION['ee_user_name'] = isset($_POST['user_name'])?$_POST['user_name']:"";
-				$_SESSION['ee_user_pass'] = $_POST['user_pass'];
+				$_SESSION['ee_user_loggedin'] = True;
 
 				$addr  = $_SERVER['PHP_SELF'];
 				$param = '';
@@ -2017,7 +2032,7 @@ class GateKeeper
 	{
 		foreach(EncodeExplorer::getConfig("users") as $user)
 		{
-			if($user[1] == $userPass)
+			if( password_verify($userPass, $user[1]) )
 			{
 				if(strlen($userName) == 0 || $userName == $user[0])
 				{
@@ -2038,9 +2053,9 @@ class GateKeeper
 
 	public static function isUserLoggedIn()
 	{
-		if(isset($_SESSION['ee_user_name'], $_SESSION['ee_user_pass']))
+		if(isset($_SESSION['ee_user_name'], $_SESSION['ee_user_loggedin']))
 		{
-			if(GateKeeper::isUser($_SESSION['ee_user_name'], $_SESSION['ee_user_pass']))
+			if(True === $_SESSION['ee_user_loggedin'])
 				return true;
 		}
 		return false;
@@ -2092,6 +2107,16 @@ class GateKeeper
 		return "an anonymous user";
 	}
 
+	public static function getUserPassHash($userName) {
+		if( EncodeExplorer::getConfig("users") != null && is_array(EncodeExplorer::getConfig("users"))){
+			foreach(EncodeExplorer::getConfig("users") as $user){
+				if($user[0] != null && $user[0] == $userName)
+					return $user[1];
+			}
+		}
+		return null;
+	}
+	
 	public static function showLoginBox(){
 		if(!GateKeeper::isUserLoggedIn() && count(EncodeExplorer::getConfig("users")) > 0)
 			return true;
@@ -2966,7 +2991,7 @@ if(($this->getConfig('log_file') != null && strlen($this->getConfig('log_file'))
 	|| (GateKeeper::isDeleteAllowed()))
 {
 ?>
-<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js"></script>
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js" integrity="sha384-XUi5ju0pX37JUIstrxWfvGMeRZXYo5ubVKX+hOgSZidD5qZ9xzzBD+Cxuu3hKqkx" crossorigin="anonymous"></script>
 <script type="text/javascript">
 //<![CDATA[
 $(document).ready(function() {
